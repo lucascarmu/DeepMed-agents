@@ -1,0 +1,22 @@
+# DeepMed Triage - Production Dependencies
+# Python 3.11+
+
+# Web framework
+fastapi==0.136.1
+uvicorn[standard]==0.46.0
+
+# LangGraph orchestration
+langgraph==1.1.10
+
+# LangChain core + OpenAI integration
+langchain-core==1.3.2
+langchain-openai==1.2.1
+
+# Data validation
+pydantic==2.13.3
+
+# HTTP client (used by langchain-openai)
+httpx==0.28.1
+
+# Environment loading
+python-dotenv==1.2.2
