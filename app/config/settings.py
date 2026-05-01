@@ -2,7 +2,7 @@
 Application configuration.
 
 Loads settings from environment variables with sensible defaults.
-No hardcoded API keys.
+No hardcoded API keys or connection strings.
 """
 
 from __future__ import annotations
@@ -34,12 +34,23 @@ class Settings:
     log_level: str = field(
         default_factory=lambda: os.environ.get("LOG_LEVEL", "INFO")
     )
+    database_url: str = field(
+        default_factory=lambda: os.environ.get(
+            "DATABASE_URL",
+            "postgresql://deepmed:deepmed@localhost:5432/deepmed?sslmode=disable",
+        )
+    )
 
     def validate(self) -> None:
         """Raise if critical settings are missing."""
         if not self.openai_api_key:
             raise ValueError(
                 "OPENAI_API_KEY environment variable is required. "
+                "Set it before starting the application."
+            )
+        if not self.database_url:
+            raise ValueError(
+                "DATABASE_URL environment variable is required. "
                 "Set it before starting the application."
             )
 

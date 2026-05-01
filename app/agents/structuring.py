@@ -1,8 +1,8 @@
 """
 Structuring Agent.
 
-Takes the enriched (or raw) patient conversation and produces a strict
-ClinicalSummary JSON object validated against the Pydantic model.
+Takes the full multi-turn conversation from state['messages'] and produces
+a strict ClinicalSummary JSON object validated against the Pydantic model.
 """
 
 from __future__ import annotations
@@ -11,7 +11,7 @@ import json
 import logging
 from pathlib import Path
 
-from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
 from app.schemas.clinical_summary import ClinicalSummary
 from app.schemas.state import PatientState
@@ -25,6 +25,26 @@ _PROMPT_PATH = Path(__file__).resolve().parent.parent / "prompts" / "structuring
 def _load_prompt() -> str:
     """Load the structuring prompt template from disk."""
     return _PROMPT_PATH.read_text(encoding="utf-8")
+
+
+def _messages_to_transcript(messages: list) -> str:
+    """Convert message list to a readable transcript for the LLM."""
+    lines = []
+    for msg in messages:
+        if isinstance(msg, dict):
+            role = msg.get("type") or msg.get("role", "unknown")
+            content = msg.get("content", "")
+        elif isinstance(msg, (HumanMessage, AIMessage, SystemMessage)):
+            role = msg.type
+            content = msg.content
+        else:
+            continue
+
+        if role in ("human", "user"):
+            lines.append(f"PATIENT: {content}")
+        elif role in ("ai", "assistant"):
+            lines.append(f"ASSISTANT: {content}")
+    return "\n".join(lines)
 
 
 def _parse_json_response(raw_text: str) -> dict:
@@ -47,12 +67,13 @@ def _parse_json_response(raw_text: str) -> dict:
 
 def structuring_node(state: PatientState) -> dict:
     """
-    Structuring node — converts conversation to ClinicalSummary.
+    Structuring node — converts the full conversation to ClinicalSummary.
 
-    Input: state['enriched_conversation'] (falls back to 'raw_conversation')
+    Input: state['messages'] (full multi-turn conversation)
     Output: partial state update with 'clinical_summary' (serialised dict)
     """
-    conversation = state.get("enriched_conversation") or state["raw_conversation"]
+    messages = state.get("messages", [])
+    conversation = _messages_to_transcript(messages)
     logger.info("Structuring node: processing conversation (%d chars)", len(conversation))
 
     prompt_template = _load_prompt()
@@ -60,7 +81,7 @@ def structuring_node(state: PatientState) -> dict:
 
     llm = get_llm()
 
-    messages = [
+    lc_messages = [
         SystemMessage(
             content="You are a clinical data extraction engine. Output ONLY valid JSON."
         ),
@@ -68,7 +89,7 @@ def structuring_node(state: PatientState) -> dict:
     ]
 
     try:
-        response = llm.invoke(messages)
+        response = llm.invoke(lc_messages)
         raw_json = _parse_json_response(response.content)
 
         # Validate through Pydantic — this enforces the strict schema

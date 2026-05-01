@@ -1,0 +1,50 @@
+# ──────────────────────────────────────────────────────────────
+# DeepMed Triage — Docker Compose
+# Orchestrates FastAPI app + PostgreSQL 15
+# ──────────────────────────────────────────────────────────────
+
+services:
+  # ── PostgreSQL Database ─────────────────────────────────────
+  db:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: deepmed
+      POSTGRES_PASSWORD: deepmed
+      POSTGRES_DB: deepmed
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U deepmed -d deepmed"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── FastAPI Application ─────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-5-nano}
+      - DATABASE_URL=postgresql://deepmed:deepmed@db:5432/deepmed?sslmode=disable
+      - LOG_LEVEL=INFO
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+# ── Named volumes ───────────────────────────────────────────
+volumes:
+  pgdata:
+    driver: local
